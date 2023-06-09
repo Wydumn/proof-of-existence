@@ -1,4 +1,4 @@
-use crate::{mock::*, Error};
+use crate::{mock::*, Error, Event, Kitty};
 use frame_support::{assert_noop, assert_ok};
 
 #[test]
@@ -14,6 +14,13 @@ fn it_test() {
 		assert_eq!(KittiesModule::kitties(kitty_id).is_some(), true);
 		assert_eq!(KittiesModule::kitty_owner(kitty_id), Some(account_id));
 		assert_eq!(KittiesModule::kitty_parents(kitty_id), None);
+
+		let kitty = KittiesModule::kitties(kitty_id).unwrap();
+		System::assert_last_event(Event::KittyCreated { 
+			who: account_id,
+			kitty_id,
+			kitty,
+		}.into());
 
 		crate::NextKittyId::<Test>::set(crate::KittyId::max_value());
 		assert_noop!(
@@ -51,6 +58,13 @@ fn it_works_for_breed() {
 		assert_eq!(KittiesModule::kitties(breed_kitty_id).is_some(), true);
 		assert_eq!(KittiesModule::kitty_owner(breed_kitty_id), Some(account_id));
 		assert_eq!(KittiesModule::kitty_parents(breed_kitty_id), Some((kitty_id, kitty_id + 1)));
+		
+		let kitty = KittiesModule::kitties(kitty_id).unwrap();
+		System::assert_last_event(Event::KittyBreed { 
+			who: account_id,
+			kitty_id: breed_kitty_id,
+			kitty,
+		}.into());
 	});
 }
 
@@ -71,8 +85,16 @@ fn it_works_for_transfer() {
 
 		assert_ok!(KittiesModule::transfer(RuntimeOrigin::signed(account_id), recipient, kitty_id));
 		assert_eq!(KittiesModule::kitty_owner(kitty_id), Some(recipient));
+		
+		System::assert_last_event(Event::KittyTransferred { 
+			who: account_id,
+			recipient,
+			kitty_id,
+		}.into());
 
     assert_ok!(KittiesModule::transfer(RuntimeOrigin::signed(recipient), account_id, kitty_id));
     assert_eq!(KittiesModule::kitty_owner(kitty_id), Some(account_id));
+
+		
 	});
 }
