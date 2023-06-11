@@ -1,11 +1,13 @@
 use crate as pallet_kitties;
 use frame_support::traits::{ConstU16, ConstU64};
+use frame_support::PalletId;
 use sp_core::H256;
 use sp_runtime::{
 	testing::Header,
 	traits::{BlakeTwo256, IdentityLookup},
 };
 use pallet_insecure_randomness_collective_flip;
+use pallet_balances;
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -20,8 +22,11 @@ frame_support::construct_runtime!(
 		System: frame_system,
 		KittiesModule: pallet_kitties,
 		Randomness: pallet_insecure_randomness_collective_flip,
+		Balances: pallet_balances,
 	}
 );
+
+pub type Balance = u128;
 
 impl frame_system::Config for Test {
 	type BaseCallFilter = frame_support::traits::Everything;
@@ -41,7 +46,7 @@ impl frame_system::Config for Test {
 	type BlockHashCount = ConstU64<250>;
 	type Version = ();
 	type PalletInfo = PalletInfo;
-	type AccountData = ();
+	type AccountData = pallet_balances::AccountData<Balance>;
 	type OnNewAccount = ();
 	type OnKilledAccount = ();
 	type SystemWeightInfo = ();
@@ -50,16 +55,43 @@ impl frame_system::Config for Test {
 	type MaxConsumers = frame_support::traits::ConstU32<16>;
 }
 
+pub const EXISTENTIAL_DEPOSIT: u128 = 500;
+
+frame_support::parameter_types! {
+	pub ExistentialDeposit: Balance = EXISTENTIAL_DEPOSIT;
+	pub KittyPalletId: PalletId = PalletId(*b"py/kitty");
+	pub KittyPrice: Balance = EXISTENTIAL_DEPOSIT * 10;
+}
+
 impl pallet_kitties::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type Randomness = Randomness;
+	type Currency = Balances;
+	type KittyPrice = KittyPrice;
+	type PalletId = KittyPalletId;
 }
-
 impl pallet_insecure_randomness_collective_flip::Config for Test {}
+
+// pallet-balances
+impl pallet_balances::Config for Test {
+	type Balance = Balance;
+	type DustRemoval = ();
+	type RuntimeEvent = RuntimeEvent;
+	type ExistentialDeposit = ExistentialDeposit;
+	type AccountStore = System;
+	type MaxLocks = ();
+	type WeightInfo = ();
+	type MaxReserves = ();
+	type ReserveIdentifier = [u8; 8];
+}
 
 // Build genesis storage according to the mock runtime.
 pub fn new_test_ext() -> sp_io::TestExternalities {
-	let mut ext: sp_io::TestExternalities = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap().into();
+	let mut ext = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
+	pallet_balances::GenesisConfig::<Test> {
+		balances: vec![(1, 100_000), (2, 100_000), (3, 100_000)]
+	}.assimilate_storage(&mut ext).unwrap();
+	let mut ext: sp_io::TestExternalities = ext.into();
 	ext.execute_with(|| System::set_block_number(1));
 	ext
 }

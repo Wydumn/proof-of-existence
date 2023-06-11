@@ -149,9 +149,9 @@ pub mod pallet {
 
 			let selector = Self::random_value(&who);
 			let mut dna = [0u8; 16];
-			/* for i in 0..kitty_1.0.len() {
-				data[i] = (kitty_1.0[i] & selector[i]) | (kitty_2.0[i] & !selector[i]);
-			} */
+			for i in 0..kitty_1.dna.len() {
+				dna[i] = (kitty_1.dna[i] & selector[i]) | (kitty_2.dna[i] & !selector[i]);
+			}
 			let kitty = Kitty { dna, name};
 
 			let price = T::KittyPrice::get();
@@ -199,10 +199,10 @@ pub mod pallet {
 			let who = ensure_signed(origin)?;
 			ensure!(Kitties::<T>::contains_key(kitty_id), Error::<T>::InvalidKittyId);
 
-			let owner = Self::kitty_owner(kitty_id).ok_or(Error::<T>::InvalidKittyId)?;
+			let owner = Self::kitty_owner(kitty_id).ok_or(Error::<T>::NoOwner)?;
 			ensure!(owner == who, Error::<T>::NotOwner);
 
-			ensure!(Self::kitty_on_sale(kitty_id).is_some(), Error::<T>::AlreadyOnSale);
+			ensure!(!KittyOnSale::<T>::contains_key(kitty_id), Error::<T>::AlreadyOnSale);
 
 			KittyOnSale::<T>::insert(kitty_id, ());
 			Self::deposit_event(Event::KittyOnSale { who, kitty_id });

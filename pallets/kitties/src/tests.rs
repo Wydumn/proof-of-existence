@@ -1,14 +1,25 @@
-use crate::{mock::*, Error, Event, Kitty};
+use crate::{mock::*, Error, Event};
 use frame_support::{assert_noop, assert_ok};
 
+const INITIAL_BANANCE: u128 = 100_000;
+
+use sp_runtime::traits::AccountIdConversion;
+
+fn get_pallet_account() -> u64 {
+	KittyPalletId::get().into_account_truncating()
+}
+
 #[test]
-fn it_test() {
+fn it_test_for_create() {
 	new_test_ext().execute_with(|| {
 		let kitty_id = 0;
 		let account_id = 1;
+		let name = *b"0001";
 
 		assert_eq!(kitty_id, KittiesModule::next_kitty_id());
-		assert_ok!(KittiesModule::create(RuntimeOrigin::signed(account_id)));
+		assert_ok!(KittiesModule::create(RuntimeOrigin::signed(account_id), name));
+		assert_eq!(Balances::free_balance(account_id), INITIAL_BANANCE - EXISTENTIAL_DEPOSIT * 10);
+		assert_eq!(Balances::free_balance(get_pallet_account()), EXISTENTIAL_DEPOSIT * 10);
 
 		assert_eq!(kitty_id + 1, KittiesModule::next_kitty_id());
 		assert_eq!(KittiesModule::kitties(kitty_id).is_some(), true);
@@ -24,7 +35,7 @@ fn it_test() {
 
 		crate::NextKittyId::<Test>::set(crate::KittyId::max_value());
 		assert_noop!(
-			KittiesModule::create(RuntimeOrigin::signed(account_id)),
+			KittiesModule::create(RuntimeOrigin::signed(account_id), name),
 			Error::<Test>::InvalidKittyId
 		);
 	});
@@ -35,23 +46,29 @@ fn it_works_for_breed() {
 	new_test_ext().execute_with(|| {
 		let kitty_id = 0;
 		let account_id = 1;
+		let parent_name = *b"0000";
+		let parent_name_2 = *b"0001";
+		let child_name = *b"0002";
 
 		assert_noop!(
-			KittiesModule::breed(RuntimeOrigin::signed(account_id), kitty_id, kitty_id),
+			KittiesModule::breed(RuntimeOrigin::signed(account_id), kitty_id, kitty_id, parent_name),
 			Error::<Test>::SameKittyId,
 		);
 
 		assert_noop!(
-			KittiesModule::breed(RuntimeOrigin::signed(account_id), kitty_id, kitty_id + 1),
+			KittiesModule::breed(RuntimeOrigin::signed(account_id), kitty_id, kitty_id + 1, parent_name),
 			Error::<Test>::InvalidKittyId,
 		);
 
-		assert_ok!(KittiesModule::create(RuntimeOrigin::signed(account_id)));
-		assert_ok!(KittiesModule::create(RuntimeOrigin::signed(account_id)));
+		assert_ok!(KittiesModule::create(RuntimeOrigin::signed(account_id), parent_name));
+		assert_ok!(KittiesModule::create(RuntimeOrigin::signed(account_id), parent_name_2));
 
 		assert_eq!(KittiesModule::next_kitty_id(), kitty_id + 2);
 
-		assert_ok!(KittiesModule::breed(RuntimeOrigin::signed(account_id), kitty_id, kitty_id + 1));
+		assert_ok!(KittiesModule::breed(RuntimeOrigin::signed(account_id), kitty_id, kitty_id + 1, child_name));
+		let create_and_breed_fees = EXISTENTIAL_DEPOSIT * 10 * 3;
+		assert_eq!(Balances::free_balance(account_id), INITIAL_BANANCE - create_and_breed_fees);
+		assert_eq!(Balances::free_balance(get_pallet_account()), create_and_breed_fees);
 
 		let breed_kitty_id = 2;
 		assert_eq!(KittiesModule::next_kitty_id(), breed_kitty_id + 1);
@@ -59,7 +76,7 @@ fn it_works_for_breed() {
 		assert_eq!(KittiesModule::kitty_owner(breed_kitty_id), Some(account_id));
 		assert_eq!(KittiesModule::kitty_parents(breed_kitty_id), Some((kitty_id, kitty_id + 1)));
 		
-		let kitty = KittiesModule::kitties(kitty_id).unwrap();
+		let kitty = KittiesModule::kitties(breed_kitty_id).unwrap();
 		System::assert_last_event(Event::KittyBreed { 
 			who: account_id,
 			kitty_id: breed_kitty_id,
@@ -74,8 +91,9 @@ fn it_works_for_transfer() {
 		let kitty_id = 0;
 		let account_id = 1;
 		let recipient = 2;
+		let name = *b"0001";
 
-		assert_ok!(KittiesModule::create(RuntimeOrigin::signed(account_id)));
+		assert_ok!(KittiesModule::create(RuntimeOrigin::signed(account_id), name));
 		assert_eq!(KittiesModule::kitty_owner(kitty_id), Some(account_id));
 
 		assert_noop!(
@@ -94,7 +112,82 @@ fn it_works_for_transfer() {
 
     assert_ok!(KittiesModule::transfer(RuntimeOrigin::signed(recipient), account_id, kitty_id));
     assert_eq!(KittiesModule::kitty_owner(kitty_id), Some(account_id));
+	});
+}
 
+
+#[test]
+fn it_works_for_sale() {
+	// test sale function
+	new_test_ext().execute_with(|| {
+		let kitty_id = 0;
+		let account_id = 1;
+		let account_id_2 = 2;
+		let name = *b"0001";
+
+		// create kitty
+		assert_ok!(KittiesModule::create(RuntimeOrigin::signed(account_id), name));
+		assert_eq!(Balances::free_balance(account_id), INITIAL_BANANCE - EXISTENTIAL_DEPOSIT * 10);
+		assert_eq!(Balances::free_balance(get_pallet_account()), EXISTENTIAL_DEPOSIT * 10);
+		assert_eq!(KittiesModule::kitty_owner(kitty_id), Some(account_id));
+
+		// wrong owner
+		assert_noop!(
+			KittiesModule::sale(RuntimeOrigin::signed(account_id_2), kitty_id),
+			Error::<Test>::NotOwner,
+		);
+
+		// sale success
+		assert_ok!(KittiesModule::sale(RuntimeOrigin::signed(account_id), kitty_id));
+		assert_eq!(KittiesModule::kitty_on_sale(kitty_id), Some(()));
 		
+		// emit KittyOnSale Event
+		System::assert_last_event(Event::KittyOnSale { 
+			who: account_id,
+			kitty_id,
+		}.into());
+	});
+}
+
+#[test]
+fn it_works_for_buy() {
+	new_test_ext().execute_with(|| {
+		let kitty_id = 0;
+		let account_id = 1;
+		let buyer = 2;
+		let name = *b"0001";
+
+		// create kitty
+		assert_ok!(KittiesModule::create(RuntimeOrigin::signed(account_id), name));
+		assert_eq!(Balances::free_balance(account_id), INITIAL_BANANCE - EXISTENTIAL_DEPOSIT * 10);
+
+		// confirm create success
+		assert_eq!(KittiesModule::kitty_owner(kitty_id), Some(account_id));
+
+		// failed if kitty owner is your self
+		assert_noop!(
+			KittiesModule::buy(RuntimeOrigin::signed(account_id), kitty_id),
+			Error::<Test>::AlreadyOwned,
+		);
+
+		// failed if kitty is not on sale
+		assert_noop!(
+			KittiesModule::buy(RuntimeOrigin::signed(buyer), kitty_id),
+			Error::<Test>::NotOnSale,
+		);
+
+		// sale kitty		
+		assert_ok!(KittiesModule::sale(RuntimeOrigin::signed(account_id), kitty_id));
+
+		// buy kitty success
+		assert_ok!(KittiesModule::buy(RuntimeOrigin::signed(buyer), kitty_id));
+		assert_eq!(KittiesModule::kitty_owner(kitty_id), Some(buyer));
+		assert_eq!(Balances::free_balance(buyer), INITIAL_BANANCE - EXISTENTIAL_DEPOSIT * 10);
+		assert_eq!(Balances::free_balance(account_id), INITIAL_BANANCE);
+
+		System::assert_last_event(Event::KittyBought { 
+			who: buyer,
+			kitty_id,
+		}.into());
 	});
 }
