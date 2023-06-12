@@ -6,7 +6,6 @@ use frame_support::{
   weights::Weight,
 };
 
-use frame_system::pallet_prelude::*;
 use frame_support::{migration::storage_key_iter, Blake2_128Concat};
 
 #[derive(

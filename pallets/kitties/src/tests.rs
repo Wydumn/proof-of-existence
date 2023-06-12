@@ -1,4 +1,4 @@
-use crate::{mock::*, Error, Event};
+use crate::{mock::*, Error, Event, KittyName};
 use frame_support::{assert_noop, assert_ok};
 
 const INITIAL_BANANCE: u128 = 100_000;
@@ -14,7 +14,7 @@ fn it_test_for_create() {
 	new_test_ext().execute_with(|| {
 		let kitty_id = 0;
 		let account_id = 1;
-		let name = *b"0001";
+		let name = KittyName([0, 0, 0, 0, 0, 0, 0, 1]);
 
 		assert_eq!(kitty_id, KittiesModule::next_kitty_id());
 		assert_ok!(KittiesModule::create(RuntimeOrigin::signed(account_id), name));
@@ -46,9 +46,9 @@ fn it_works_for_breed() {
 	new_test_ext().execute_with(|| {
 		let kitty_id = 0;
 		let account_id = 1;
-		let parent_name = *b"0000";
-		let parent_name_2 = *b"0001";
-		let child_name = *b"0002";
+		let parent_name = KittyName([0, 0, 0, 0, 0, 0, 0, 0]);
+		let parent_name_2 = KittyName([0, 0, 0, 0, 0, 0, 0, 1]);
+		let child_name = KittyName([0, 0, 0, 0, 0, 0, 0, 2]);
 
 		assert_noop!(
 			KittiesModule::breed(RuntimeOrigin::signed(account_id), kitty_id, kitty_id, parent_name),
@@ -91,7 +91,7 @@ fn it_works_for_transfer() {
 		let kitty_id = 0;
 		let account_id = 1;
 		let recipient = 2;
-		let name = *b"0001";
+		let name = KittyName([0, 0, 0, 0, 0, 0, 0, 1]);
 
 		assert_ok!(KittiesModule::create(RuntimeOrigin::signed(account_id), name));
 		assert_eq!(KittiesModule::kitty_owner(kitty_id), Some(account_id));
@@ -123,7 +123,7 @@ fn it_works_for_sale() {
 		let kitty_id = 0;
 		let account_id = 1;
 		let account_id_2 = 2;
-		let name = *b"0001";
+		let name = KittyName([0, 0, 0, 0, 0, 0, 0, 1]);
 
 		// create kitty
 		assert_ok!(KittiesModule::create(RuntimeOrigin::signed(account_id), name));
@@ -155,7 +155,7 @@ fn it_works_for_buy() {
 		let kitty_id = 0;
 		let account_id = 1;
 		let buyer = 2;
-		let name = *b"0001";
+		let name = KittyName([0, 0, 0, 0, 0, 0, 0, 1]);
 
 		// create kitty
 		assert_ok!(KittiesModule::create(RuntimeOrigin::signed(account_id), name));
