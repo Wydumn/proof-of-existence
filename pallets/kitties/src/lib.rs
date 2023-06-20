@@ -10,9 +10,11 @@ mod tests;
 
 mod migrations;
 
+
 #[frame_support::pallet]
 pub mod pallet {
-	use frame_support::{pallet_prelude::*, PalletId};
+	use serde::{Deserialize, Deserializer};
+	use frame_support::{pallet_prelude::*, sp_std::vec::*, PalletId};
 	use frame_system::pallet_prelude::*;
 
 	use frame_support::traits::{Currency, ExistenceRequirement, Randomness};
@@ -20,11 +22,27 @@ pub mod pallet {
 	use sp_io::hashing::blake2_128;
 	use sp_runtime::traits::AccountIdConversion;
 
+	use sp_io::offchain_index;
+	const ONCHAIN_TX_KEY: &[u8] = b"kitty_pallet::indexing1";
+
+	#[derive(Debug, Deserialize, Encode, Decode, Default)]
+	struct IndexingData(#[serde(deserialize_with = "de_string_to_bytes")] Vec<u8>, u64);
+
+	pub fn de_string_to_bytes<'de, D>(de: D) -> Result<Vec<u8>, D::Error>
+	where
+		D: Deserializer<'de>,
+	{
+		let s: &str = Deserialize::deserialize(de)?;
+		Ok(s.as_bytes().to_vec())
+	}
+
 	use crate::migrations;
 
 	pub type KittyId = u32;
 
-	#[derive(Encode, Decode, Clone, Copy, RuntimeDebug, PartialEq, Eq, Default, TypeInfo, MaxEncodedLen)]
+	#[derive(
+		Encode, Decode, Clone, Copy, RuntimeDebug, PartialEq, Eq, Default, TypeInfo, MaxEncodedLen,
+	)]
 	pub struct KittyName(pub [u8; 8]);
 	#[derive(
 		Encode, Decode, Clone, Copy, RuntimeDebug, PartialEq, Eq, Default, TypeInfo, MaxEncodedLen,
@@ -101,9 +119,12 @@ pub mod pallet {
 
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-		fn on_runtime_upgrade()	-> frame_support::weights::Weight {
+		fn on_runtime_upgrade() -> frame_support::weights::Weight {
 			migrations::v2::migrate_to_v2::<T>()
 		}
+
+		// write data to offchain storage with offchain indexing
+		fn offchain_worker(_block_number: T::BlockNumber) {}
 	}
 
 	#[pallet::call]
@@ -139,7 +160,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			kitty_id_1: KittyId,
 			kitty_id_2: KittyId,
-			name: KittyName
+			name: KittyName,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
 			ensure!(kitty_id_1 != kitty_id_2, Error::<T>::SameKittyId);
@@ -156,7 +177,7 @@ pub mod pallet {
 			for i in 0..kitty_1.dna.len() {
 				dna[i] = (kitty_1.dna[i] & selector[i]) | (kitty_2.dna[i] & !selector[i]);
 			}
-			let kitty = Kitty { dna, name};
+			let kitty = Kitty { dna, name };
 
 			let price = T::KittyPrice::get();
 			// T::Currency::reserve(&who, price)?;
@@ -233,6 +254,18 @@ pub mod pallet {
 			Self::deposit_event(Event::KittyBought { who, kitty_id });
 			Ok(())
 		}
+
+		#[pallet::call_index(5)]
+		#[pallet::weight(10_000)]
+		pub fn set_local_storage(origin: OriginFor<T>, number: u64) -> DispatchResult {
+			let _who = ensure_signed(origin)?;
+			let key = Self::derived_key(frame_system::Module::<T>::block_number());
+			let data = IndexingData(b"kitty_unsigned".to_vec(), number);
+			log::info!("offchain key =============> {:?}", key);
+			log::info!("offchain value =============> {:?}", data.encode());
+			offchain_index::set(&key, &data.encode());
+			Ok(())
+		}
 	}
 
 	impl<T: Config> Pallet<T> {
@@ -257,6 +290,18 @@ pub mod pallet {
 
 		fn get_account_id() -> T::AccountId {
 			T::PalletId::get().into_account_truncating()
+		}
+
+		fn derived_key(block_number: T::BlockNumber) -> Vec<u8> {
+			block_number.using_encoded(|encoded_bn| {
+				ONCHAIN_TX_KEY
+					.clone()
+					.into_iter()
+					.chain(b"/".into_iter())
+					.chain(encoded_bn)
+					.copied()
+					.collect::<Vec<u8>>()
+			})
 		}
 	}
 }
