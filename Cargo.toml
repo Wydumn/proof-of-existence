@@ -4,6 +4,7 @@ members = [
     "pallets/poe",
     "pallets/kitties",
     "pallets/template",
+    "pallets/ocw",
     "runtime",
 ]
 [profile.release]
