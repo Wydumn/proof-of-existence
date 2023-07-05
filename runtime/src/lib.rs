@@ -56,6 +56,8 @@ pub use pallet_kitties;
 
 pub use pallet_ocw;
 
+pub use pallet_poe;
+
 /// An index to a block.
 pub type BlockNumber = u32;
 
@@ -350,6 +352,16 @@ impl pallet_ocw::Config for Runtime {
 	type AuthorityId = pallet_ocw::crypto::TestAuthId;
 }
 
+parameter_types! {
+	pub MaxClaimLength: u32 = 1000000;
+}
+
+impl pallet_poe::Config for Runtime {
+	type MaxClaimLength = MaxClaimLength;
+	type RuntimeEvent = RuntimeEvent;
+	type WeightInfo = pallet_poe::weights::SubstrateWeight<Runtime>;
+}
+
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(
 	pub struct Runtime
@@ -369,6 +381,7 @@ construct_runtime!(
 		TemplateModule: pallet_template,
 		KittiesModule: pallet_kitties,
 		OcwModule: pallet_ocw,
+		PoeModule: pallet_poe,
 		RandomnessCollectiveFlip: pallet_insecure_randomness_collective_flip,
 	}
 );
@@ -417,6 +430,7 @@ mod benches {
 		[pallet_balances, Balances]
 		[pallet_timestamp, Timestamp]
 		[pallet_template, TemplateModule]
+		[pallet_poe, PoeModule]
 	);
 }
 
